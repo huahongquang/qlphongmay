@@ -98,12 +98,15 @@ const upload = multer({
 
 // Helper lấy địa chỉ IP của Client
 function getClientIp(req) {
-  let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+  let ip = req.headers['x-real-ip'] || 
+           req.headers['x-vercel-forwarded-for'] || 
+           req.headers['x-forwarded-for'] || 
+           req.socket?.remoteAddress || '';
   if (typeof ip === 'string' && ip.includes(',')) {
     ip = ip.split(',')[0].trim();
   }
   // Chuẩn hóa IPv6 localhost hoặc định dạng IPv4-mapped IPv6
-  if (ip === '::1' || ip === '::ffff:127.0.0.1') return '127.0.0.1';
+  if (!ip || ip === '::1' || ip === '::ffff:127.0.0.1') return '127.0.0.1';
   return ip.replace(/^::ffff:/, '');
 }
 
@@ -193,7 +196,15 @@ if (!isVercel) {
 
 // 1. Lấy thông tin IP của Client
 app.get('/api/my-ip', (req, res) => {
-  res.json({ ipAddress: getClientIp(req) });
+  const ip = getClientIp(req);
+  const db = getDB();
+  const matchedComp = db.computers.find(c => c.expectedIp === ip || c.currentIp === ip);
+  const firstAvailableComp = db.computers.find(c => c.status === 'offline' && !c.currentUserId);
+  res.json({
+    ipAddress: ip,
+    isLocalhost: ip === '127.0.0.1',
+    suggestedDeviceName: matchedComp ? matchedComp.deviceName : (firstAvailableComp ? firstAvailableComp.deviceName : 'PC-001')
+  });
 });
 
 // 2. Lấy thông tin cấu hình kỳ thi & IPs máy chủ

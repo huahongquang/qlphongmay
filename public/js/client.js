@@ -40,14 +40,43 @@ function applyQuickDevice(val) {
   }
 }
 
-// 3. Khôi phục máy đã lưu từ lần trước
-function restoreSavedDevice() {
-  const savedDevice = localStorage.getItem('qlpm_saved_device');
-  if (savedDevice) {
-    document.getElementById('deviceName').value = savedDevice;
-    const select = document.getElementById('quickSelectDevice');
-    if (select) select.value = savedDevice;
+// 3. Khôi phục và tự động nhận diện thiết bị
+function restoreSavedDevice(suggestedFromApi) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const pcFromUrl = urlParams.get('pc') || urlParams.get('device');
+  const savedDevice = localStorage.getItem('qlpm_saved_device') || sessionStorage.getItem('qlpm_saved_device');
+  
+  let targetDevice = '';
+
+  if (pcFromUrl) {
+    // 1. Ưu tiên số 1: Lấy từ tham số URL (?pc=PC-001)
+    targetDevice = pcFromUrl.toUpperCase();
+  } else if (savedDevice) {
+    // 2. Ưu tiên số 2: Lấy từ bộ nhớ thiết bị đã lưu
+    targetDevice = savedDevice;
+  } else if (suggestedFromApi) {
+    // 3. Ưu tiên số 3: Lấy từ máy chủ gợi ý theo IP
+    targetDevice = suggestedFromApi;
+  } else {
+    // 4. Ưu tiên số 4: Tự động tính toán định danh thiết bị dựa trên cấu hình phần cứng
+    const screenInfo = `${window.screen.width}x${window.screen.height}`;
+    const rawStr = navigator.userAgent + screenInfo;
+    let hash = 0;
+    for (let i = 0; i < rawStr.length; i++) {
+      hash = ((hash << 5) - hash) + rawStr.charCodeAt(i);
+      hash |= 0;
+    }
+    const pcNum = (Math.abs(hash) % 200) + 1;
+    targetDevice = `PC-${String(pcNum).padStart(3, '0')}`;
   }
+
+  if (targetDevice) {
+    document.getElementById('deviceName').value = targetDevice;
+    const select = document.getElementById('quickSelectDevice');
+    if (select) select.value = targetDevice;
+    localStorage.setItem('qlpm_saved_device', targetDevice);
+  }
+
   const savedUserId = localStorage.getItem('qlpm_saved_userId');
   if (savedUserId) {
     document.getElementById('userId').value = savedUserId;
@@ -58,20 +87,49 @@ function restoreSavedDevice() {
   }
 }
 
-// 4. Lấy IP máy trạm từ server
+// 4. Lấy IP máy trạm từ server & Fallback Public IP khi kết nối từ xa
 async function fetchClientIp() {
+  let detectedIp = '';
+  let suggestedDevice = null;
+
   try {
     const res = await fetch('/api/my-ip');
     const data = await res.json();
-    currentClientIp = data.ipAddress || '127.0.0.1';
-    document.getElementById('clientIpDisplay').textContent = currentClientIp;
-    document.getElementById('ipAddressField').value = currentClientIp;
+    if (data.ipAddress && data.ipAddress !== '127.0.0.1') {
+      detectedIp = data.ipAddress;
+    }
+    if (data.suggestedDeviceName) {
+      suggestedDevice = data.suggestedDeviceName;
+    }
     updateConnectionBadge(true);
   } catch (err) {
-    console.warn('Không lấy được IP qua API:', err);
-    document.getElementById('clientIpDisplay').textContent = '127.0.0.1 (LAN)';
-    document.getElementById('ipAddressField').value = '127.0.0.1';
+    console.warn('API /api/my-ip chưa phản hồi, kiểm tra IP công cộng...', err);
   }
+
+  // Nếu kết nối qua Internet (Vercel/Cloud) mà IP đang là 127.0.0.1 hoặc chưa có, tự động lấy IP công cộng thực tế
+  if (!detectedIp || detectedIp === '127.0.0.1') {
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      try {
+        const pubRes = await fetch('https://api.ipify.org?format=json');
+        const pubData = await pubRes.json();
+        if (pubData.ip) {
+          detectedIp = pubData.ip;
+        }
+      } catch (e) {
+        // Fallback giữ nguyên
+      }
+    }
+  }
+
+  currentClientIp = detectedIp || '127.0.0.1';
+  const isRemote = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+  document.getElementById('clientIpDisplay').textContent = isRemote ? `${currentClientIp} (Từ xa/Internet)` : `${currentClientIp} (LAN)`;
+  document.getElementById('ipAddressField').value = currentClientIp;
+
+  // Tự động gán thiết bị nếu chưa có
+  restoreSavedDevice(suggestedDevice);
+  // Gửi ngay heartbeat để máy chủ ghi nhận
+  sendHeartbeat();
 }
 
 // 5. Lấy cấu hình kỳ thi
