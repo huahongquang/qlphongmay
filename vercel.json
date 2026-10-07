@@ -1,8 +1,21 @@
 {
   "version": 2,
+  "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/admin/",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/client",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/api/(.*)",
       "destination": "/api/index.js"
     }
   ]

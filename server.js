@@ -11,8 +11,8 @@ const { getDB, saveDB } = require('./db');
 const { checkAntiCheat } = require('./antiCheat');
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+let server = null;
+let wss = null;
 
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true' || !!process.env.NOW_REGION;
 const PORT = process.env.PORT || 3000;
@@ -112,6 +112,7 @@ function getServerIps() {
 
 // Broadcast thông điệp qua WebSocket tới tất cả client đang kết nối (Giám thị & Thí sinh)
 function broadcastWs(event, payload) {
+  if (!wss) return;
   const message = JSON.stringify({ event, data: payload, timestamp: new Date().toISOString() });
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -120,57 +121,62 @@ function broadcastWs(event, payload) {
   });
 }
 
-// ==================== WEBSOCKET HEARTBEAT & REALTIME ====================
-wss.on('connection', (ws, req) => {
-  const clientIp = getClientIp(req);
+// ==================== WEBSOCKET HEARTBEAT & REALTIME (CHỈ CHẠY TRÊN SERVER THẬT/LAN) ====================
+if (!isVercel) {
+  server = http.createServer(app);
+  wss = new WebSocket.Server({ server });
 
-  ws.on('message', messageRaw => {
-    try {
-      const msg = JSON.parse(messageRaw);
-      if (msg.type === 'heartbeat') {
-        const { deviceName, userId, studentName } = msg;
-        if (!deviceName) return;
+  wss.on('connection', (ws, req) => {
+    const clientIp = getClientIp(req);
 
-        const db = getDB();
-        const comp = db.computers.find(c => c.deviceName.toLowerCase() === deviceName.toLowerCase());
-        if (comp) {
-          comp.status = comp.status === 'submitted' ? 'submitted' : 'online';
-          comp.lastHeartbeat = new Date().toISOString();
-          comp.currentIp = clientIp;
-          if (userId) comp.currentUserId = userId;
-          if (studentName) comp.currentStudentName = studentName;
+    ws.on('message', messageRaw => {
+      try {
+        const msg = JSON.parse(messageRaw);
+        if (msg.type === 'heartbeat') {
+          const { deviceName, userId, studentName } = msg;
+          if (!deviceName) return;
 
-          saveDB(db);
-          broadcastWs('computer_updated', comp);
+          const db = getDB();
+          const comp = db.computers.find(c => c.deviceName.toLowerCase() === deviceName.toLowerCase());
+          if (comp) {
+            comp.status = comp.status === 'submitted' ? 'submitted' : 'online';
+            comp.lastHeartbeat = new Date().toISOString();
+            comp.currentIp = clientIp;
+            if (userId) comp.currentUserId = userId;
+            if (studentName) comp.currentStudentName = studentName;
+
+            saveDB(db);
+            broadcastWs('computer_updated', comp);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi phân tích WebSocket message:', err);
+      }
+    });
+  });
+
+  // Quét định kỳ kiểm tra các máy bị ngắt kết nối (Offline sau 45s không có heartbeat)
+  setInterval(() => {
+    const db = getDB();
+    const now = Date.now();
+    let hasChange = false;
+
+    db.computers.forEach(comp => {
+      if (comp.status === 'online' && comp.lastHeartbeat) {
+        const diff = now - new Date(comp.lastHeartbeat).getTime();
+        if (diff > 45000) { // 45 giây
+          comp.status = 'offline';
+          hasChange = true;
         }
       }
-    } catch (err) {
-      console.error('Lỗi phân tích WebSocket message:', err);
+    });
+
+    if (hasChange) {
+      saveDB(db);
+      broadcastWs('bulk_computers_updated', db.computers);
     }
-  });
-});
-
-// Quét định kỳ kiểm tra các máy bị ngắt kết nối (Offline sau 45s không có heartbeat)
-setInterval(() => {
-  const db = getDB();
-  const now = Date.now();
-  let hasChange = false;
-
-  db.computers.forEach(comp => {
-    if (comp.status === 'online' && comp.lastHeartbeat) {
-      const diff = now - new Date(comp.lastHeartbeat).getTime();
-      if (diff > 45000) { // 45 giây
-        comp.status = 'offline';
-        hasChange = true;
-      }
-    }
-  });
-
-  if (hasChange) {
-    saveDB(db);
-    broadcastWs('bulk_computers_updated', db.computers);
-  }
-}, 15000);
+  }, 15000);
+}
 
 // ==================== REST API ENDPOINTS ====================
 
@@ -553,18 +559,17 @@ app.post('/api/reset-data', (req, res) => {
   res.json({ success: true, message: 'Đã thiết lập lại trạng thái 200 máy về ban đầu!' });
 });
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`\n[LỖI] Cổng ${PORT} đang được ứng dụng khác sử dụng (EADDRINUSE)!`);
-    console.error(`Gợi ý: Hãy tắt cửa sổ dòng lệnh Node.js đang chạy trước đó, hoặc chạy lệnh sau trong PowerShell để giải phóng cổng:\n`);
-    console.error(`Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force\n`);
-    process.exit(1);
-  } else {
-    console.error('Lỗi khởi động Server:', err);
-  }
-});
-
-if (!isVercel) {
+if (!isVercel && server) {
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n[LỖI] Cổng ${PORT} đang được ứng dụng khác sử dụng (EADDRINUSE)!`);
+      console.error(`Gợi ý: Hãy tắt cửa sổ dòng lệnh Node.js đang chạy trước đó, hoặc chạy lệnh sau trong PowerShell để giải phóng cổng:\n`);
+      console.error(`Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force\n`);
+      process.exit(1);
+    } else {
+      console.error('Lỗi khởi động Server:', err);
+    }
+  });
   server.listen(PORT, () => {
     const ips = getServerIps();
     console.log('\n=============================================================');
