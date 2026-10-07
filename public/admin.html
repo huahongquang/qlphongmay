@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng Điều Khiển Giám Thị - Quản Lý 200 Máy Tính Phòng Thi</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .computer-card {
+      transition: all 0.15s ease-in-out;
+    }
+    .computer-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.12);
+    }
+    .pulse-danger {
+      animation: dangerPulse 1.5s infinite;
+    }
+    @keyframes dangerPulse {
+      0%, 100% { border-color: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.4); }
+      50% { border-color: #f87171; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.7); }
+    }
+    .badge-submitted { background-color: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .badge-online { background-color: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .badge-offline { background-color: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+    .badge-warning { background-color: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col">
+
+  <!-- Top Navbar -->
+  <header class="bg-slate-900 text-white sticky top-0 z-40 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-blue-500/30">
+          <i class="fa-solid fa-network-wired"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base md:text-lg tracking-tight">HỆ THỐNG GIÁM THỊ PHÒNG THI 200 MÁY</h1>
+            <span id="examStatusBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              ĐANG MỞ CỔNG
+            </span>
+          </div>
+          <p id="examSubTitle" class="text-xs text-slate-400">Kỳ Thi Thực Hành • Lập Trình & Ứng Dụng Mạng</p>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="flex items-center flex-wrap gap-2">
+        <!-- Nút Khóa / Mở Cổng Nộp -->
+        <button id="toggleLockBtn" onclick="toggleExamLock()" class="text-xs font-semibold px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/30 flex items-center gap-1.5 transition">
+          <i id="lockIcon" class="fa-solid fa-lock-open"></i>
+          <span id="lockText">Khóa Cổng Nộp</span>
+        </button>
+
+        <!-- Nút Tải Toàn Bộ Bài Thi ZIP -->
+        <a href="/api/export-zip" class="text-xs font-semibold px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-sm flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-file-zipper"></i>
+          <span>Tải Toàn Bộ Bài Thi (.ZIP)</span>
+        </a>
+
+        <!-- Nút Giả Lập Demo 35 Máy -->
+        <button onclick="simulateDemoData()" class="text-xs font-semibold px-3 py-2 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white flex items-center gap-1.5 transition" title="Tự động giả lập nộp bài cho 35 máy và tạo 2 trường hợp cảnh báo mẫu">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Giả Lập Demo (35 Máy)</span>
+        </button>
+
+        <!-- Cài đặt & Tùy chọn -->
+        <button onclick="openConfigModal()" class="text-xs font-semibold p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Cấu hình kỳ thi">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+
+        <a href="/" target="_blank" class="text-xs font-semibold px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Mở cổng nộp bài máy trạm">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> Máy Trạm
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Server LAN IP Notice Bar -->
+  <div class="bg-blue-900/30 border-b border-blue-200/20 px-4 py-2 text-slate-700 bg-white text-xs">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-blue-700 flex items-center gap-1">
+          <i class="fa-solid fa-circle-info"></i> Địa chỉ mạng LAN cho 200 máy trạm mở trình duyệt:
+        </span>
+        <span id="serverIpList" class="font-mono bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200 font-semibold">
+          Đang tải IP máy chủ...
+        </span>
+      </div>
+      <div class="flex items-center gap-3 text-slate-500">
+        <span><i class="fa-solid fa-clock"></i> <span id="clockDisplay">--:--:--</span></span>
+        <button onclick="resetDataConfirm()" class="text-rose-600 hover:text-rose-800 font-medium hover:underline text-[11px]">
+          <i class="fa-solid fa-rotate-left"></i> Đặt lại phòng thi
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto w-full px-4 py-6 flex-1 space-y-6">
+
+    <!-- KPI STATS CARDS -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+      
+      <!-- Card 1: Tổng số máy -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase text-slate-500">Quy Mô Phòng</p>
+          <h3 id="statTotal" class="text-2xl font-black text-slate-800 mt-1">200</h3>
+          <p class="text-[11px] text-slate-400">Máy tính (4 Phòng)</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-server"></i>
+        </div>
+      </div>
+
+      <!-- Card 2: Máy Online -->
+      <div class="bg-white rounded-2xl p-4 border border-blue-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase text-blue-600">Đang Trực Tuyến</p>
+          <h3 id="statOnline" class="text-2xl font-black text-blue-600 mt-1">0</h3>
+          <p id="statOnlinePct" class="text-[11px] text-blue-500 font-medium">0% tổng số máy</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-signal"></i>
+        </div>
+      </div>
+
+      <!-- Card 3: Đã Nộp Bài -->
+      <div class="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase text-emerald-600">Đã Nộp Bài</p>
+          <h3 id="statSubmitted" class="text-2xl font-black text-emerald-600 mt-1">0</h3>
+          <p id="statSubmittedPct" class="text-[11px] text-emerald-500 font-medium">0% hoàn thành</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+      </div>
+
+      <!-- Card 4: Chưa Nộp Bài -->
+      <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase text-amber-600">Chưa Nộp Bài</p>
+          <h3 id="statPending" class="text-2xl font-black text-amber-600 mt-1">200</h3>
+          <p class="text-[11px] text-amber-500 font-medium">Đang làm / Chưa nộp</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-hourglass-half"></i>
+        </div>
+      </div>
+
+      <!-- Card 5: Cảnh Báo Gian Lận -->
+      <div class="col-span-2 md:col-span-1 bg-white rounded-2xl p-4 border border-rose-200 shadow-sm flex items-center justify-between relative overflow-hidden">
+        <div>
+          <p class="text-xs font-semibold uppercase text-rose-600">Cảnh Báo Vi Phạm</p>
+          <h3 id="statAlerts" class="text-2xl font-black text-rose-600 mt-1">0</h3>
+          <p class="text-[11px] text-rose-500 font-medium">Nghi vấn gian lận</p>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- MAIN NAVIGATION TABS -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="flex border-b border-slate-200 bg-slate-50/60 px-4 pt-3 gap-2 overflow-x-auto">
+        <button onclick="switchTab('matrix')" id="tabBtnMatrix" class="px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-blue-600 text-blue-600 bg-white transition flex items-center gap-2">
+          <i class="fa-solid fa-border-all"></i>
+          <span>Sơ Đồ 200 Máy Tính</span>
+        </button>
+        <button onclick="switchTab('submissions')" id="tabBtnSubmissions" class="px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition flex items-center gap-2">
+          <i class="fa-solid fa-list-check"></i>
+          <span>Danh Sách Bài Nộp</span>
+          <span id="tabCountSubmissions" class="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 text-slate-700">0</span>
+        </button>
+        <button onclick="switchTab('alerts')" id="tabBtnAlerts" class="px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition flex items-center gap-2">
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>Nhật Ký Chống Gian Lận</span>
+          <span id="tabCountAlerts" class="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-100 text-rose-700 font-bold">0</span>
+        </button>
+      </div>
+
+      <!-- TAB 1: SƠ ĐỒ MATRIX 200 MÁY TÍNH -->
+      <div id="tabMatrixView" class="p-4 md:p-6 space-y-4">
+        
+        <!-- Controls & Filters Bar -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          
+          <!-- Lọc Phòng -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-xs font-bold text-slate-500 mr-1"><i class="fa-solid fa-door-open"></i> Phòng:</span>
+            <button onclick="filterRoom('all')" class="room-btn active px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white" data-room="all">Tất Cả 200 Máy</button>
+            <button onclick="filterRoom('Phòng A')" class="room-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100" data-room="Phòng A">Phòng A (1-50)</button>
+            <button onclick="filterRoom('Phòng B')" class="room-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100" data-room="Phòng B">Phòng B (51-100)</button>
+            <button onclick="filterRoom('Phòng C')" class="room-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100" data-room="Phòng C">Phòng C (101-150)</button>
+            <button onclick="filterRoom('Phòng D')" class="room-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100" data-room="Phòng D">Phòng D (151-200)</button>
+          </div>
+
+          <!-- Lọc Trạng Thái & Tìm Kiếm -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <select id="statusFilter" onchange="renderMatrix()" class="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium">
+              <option value="all">Tất cả trạng thái</option>
+              <option value="submitted">🟢 Đã nộp bài</option>
+              <option value="online">🔵 Đang Online</option>
+              <option value="offline">⚪ Ngoại tuyến (Offline)</option>
+              <option value="warning">🔴 Có cảnh báo</option>
+            </select>
+
+            <div class="relative">
+              <input type="text" id="matrixSearch" oninput="renderMatrix()" placeholder="Tìm máy (VD: PC-012, SV...)"
+                class="text-xs bg-white border border-slate-300 rounded-lg pl-7 pr-3 py-1.5 w-44 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-400 text-xs"></i>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Chú Thích Trạng Thái (Legend) -->
+        <div class="flex flex-wrap items-center gap-4 text-xs text-slate-600 px-1">
+          <div class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+            <span>Đã nộp bài</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+            <span>Đang Online làm bài</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-slate-300"></span>
+            <span>Chưa kết nối (Offline)</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+            <span class="text-rose-600 font-bold">Cảnh báo gian lận / Đổi máy / IP lạ</span>
+          </div>
+        </div>
+
+        <!-- MATRIX 200 COMPUTERS GRID -->
+        <div id="computersMatrixGrid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2.5 max-h-[640px] overflow-y-auto p-2 bg-slate-50/50 rounded-xl border border-slate-200">
+          <!-- Các ô máy tính từ PC-001 tới PC-200 được render bằng JavaScript -->
+        </div>
+
+      </div>
+
+      <!-- TAB 2: DANH SÁCH BÀI NỘP (SUBMISSIONS TABLE) -->
+      <div id="tabSubmissionsView" class="hidden p-4 md:p-6 space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+          <div class="relative w-full sm:w-72">
+            <input type="text" id="subSearch" oninput="renderSubmissionsTable()" placeholder="Tìm theo MSSV, Họ tên, Tên máy..."
+              class="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+          </div>
+
+          <a href="/api/export-zip" class="text-xs font-semibold px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm flex items-center gap-2">
+            <i class="fa-solid fa-download"></i> Tải về tất cả file bài làm (.ZIP)
+          </a>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-200">
+              <tr>
+                <th class="px-3 py-3">STT</th>
+                <th class="px-3 py-3">Mã SV</th>
+                <th class="px-3 py-3">Họ Và Tên</th>
+                <th class="px-3 py-3">Máy Trạm</th>
+                <th class="px-3 py-3">Địa Chỉ IP</th>
+                <th class="px-3 py-3">Tên File</th>
+                <th class="px-3 py-3">Kích Thước</th>
+                <th class="px-3 py-3">Thời Gian Nộp</th>
+                <th class="px-3 py-3 text-center">Cảnh Báo</th>
+                <th class="px-3 py-3 text-right">Hành Động</th>
+              </tr>
+            </thead>
+            <tbody id="submissionsTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- Render động qua JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 3: TRUNG TÂM CHỐNG GIAN LẬN (ANTI-CHEAT) -->
+      <div id="tabAlertsView" class="hidden p-4 md:p-6 space-y-4">
+        <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3">
+          <div class="text-rose-600 text-xl mt-0.5">
+            <i class="fa-solid fa-shield-virus"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-sm text-rose-800">Cơ chế phát hiện gian lận tự động theo yêu cầu phòng thi:</h4>
+            <ul class="text-xs text-rose-700 list-disc list-inside mt-1 space-y-0.5">
+              <li><strong>Phát hiện thi hộ / đổi máy:</strong> Cảnh báo khi một Mã SV đăng nhập hoặc nộp bài từ 2 máy hoặc 2 địa chỉ IP khác nhau.</li>
+              <li><strong>Phát hiện nộp bài hộ:</strong> Cảnh báo khi một máy tính hoặc IP gửi nhiều bài thi cho các Mã SV khác nhau.</li>
+              <li><strong>Ngăn chặn nộp bài từ xa:</strong> Cảnh báo khi bài thi gửi từ địa chỉ IP bên ngoài mạng LAN nội bộ phòng máy.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-rose-50/50 text-[11px] uppercase font-bold text-rose-800 border-b border-rose-100">
+              <tr>
+                <th class="px-3 py-3">Thời Điểm</th>
+                <th class="px-3 py-3">Loại Cảnh Báo</th>
+                <th class="px-3 py-3">Mã SV</th>
+                <th class="px-3 py-3">Máy Trạm</th>
+                <th class="px-3 py-3">Địa Chỉ IP</th>
+                <th class="px-3 py-3">Chi Tiết Vi Phạm</th>
+                <th class="px-3 py-3 text-center">Mức Độ</th>
+              </tr>
+            </thead>
+            <tbody id="alertsTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- Render qua JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: CHI TIẾT MÁY TÍNH -->
+  <div id="computerDetailModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+      <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold">
+            <i class="fa-solid fa-desktop"></i>
+          </div>
+          <div>
+            <h3 id="modalDeviceName" class="font-bold text-base">PC-001</h3>
+            <p id="modalDeviceRoom" class="text-xs text-slate-400">Phòng A (Tầng 1)</p>
+          </div>
+        </div>
+        <button onclick="closeComputerModal()" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <!-- Trạng thái -->
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <span class="text-xs font-semibold text-slate-500 uppercase">Trạng Thái Kết Nối:</span>
+          <span id="modalStatusBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-slate-100">Đang kiểm tra</span>
+        </div>
+
+        <!-- Thông tin chi tiết -->
+        <div class="bg-slate-50 rounded-xl p-4 space-y-2 text-xs">
+          <div class="flex justify-between">
+            <span class="text-slate-500">Mã Sinh Viên:</span>
+            <span id="modalUserId" class="font-bold font-mono text-slate-800">Chưa có</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Họ và Tên:</span>
+            <span id="modalStudentName" class="font-semibold text-slate-800">Chưa có</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">IP Kết Nối Thực Tế:</span>
+            <span id="modalIp" class="font-mono font-semibold text-blue-600">---</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">IP Dự Kiến Trong Phòng:</span>
+            <span id="modalExpectedIp" class="font-mono text-slate-600">192.168.1.51</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Số Lần Nộp Bài:</span>
+            <span id="modalSubmitCount" class="font-bold text-slate-800">0</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Thời Gian Nộp Bài:</span>
+            <span id="modalSubmitTime" class="font-medium text-slate-700">Chưa nộp</span>
+          </div>
+        </div>
+
+        <!-- Cảnh báo vi phạm (nếu có) -->
+        <div id="modalWarningsBox" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 space-y-1">
+          <p class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> CẢNH BÁO PHÁT HIỆN:</p>
+          <div id="modalWarningsList" class="space-y-1"></div>
+        </div>
+
+        <!-- Tải bài thi của máy này -->
+        <div id="modalDownloadBox" class="hidden pt-2">
+          <a id="modalDownloadBtn" href="#" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
+            <i class="fa-solid fa-download"></i> Tải Bài Thi Của Máy Này
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CẤU HÌNH KỲ THI -->
+  <div id="configModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800 text-base">Cấu Hình Kỳ Thi & Phòng Máy</h3>
+        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Tên Kỳ Thi:</label>
+          <input type="text" id="cfgTitle" class="w-full p-2 border border-slate-200 rounded-lg">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Môn Thi:</label>
+          <input type="text" id="cfgSubject" class="w-full p-2 border border-slate-200 rounded-lg">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Thời Gian Làm Bài (Phút):</label>
+          <input type="number" id="cfgDuration" class="w-full p-2 border border-slate-200 rounded-lg">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Dải Mạng IP Cho Phép (Anti-Cheat):</label>
+          <input type="text" id="cfgIpPrefix" placeholder="VD: 192.168.1." class="w-full p-2 font-mono border border-slate-200 rounded-lg">
+          <p class="text-[10px] text-slate-400 mt-1">Các IP gửi bài không bắt đầu bằng dải này sẽ bị gắn cờ "Nộp từ xa"</p>
+        </div>
+        <div class="flex items-center gap-2 pt-2">
+          <input type="checkbox" id="cfgResubmit" class="rounded text-blue-600">
+          <label for="cfgResubmit" class="font-semibold text-slate-700">Cho phép thí sinh nộp lại đè bài cũ</label>
+        </div>
+      </div>
+
+      <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
+        <button onclick="closeConfigModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200">Hủy</button>
+        <button onclick="saveExamConfig()" class="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">Lưu Cấu Hình</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>
