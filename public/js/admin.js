@@ -468,7 +468,16 @@ async function simulateDemoData() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ count: 35 })
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error(text.slice(0, 150));
+    }
+    if (!res.ok) {
+      throw new Error(data.message || `Lỗi HTTP ${res.status}`);
+    }
     alert(data.message || 'Đã tạo dữ liệu giả lập thành công!');
     fetchInitialData();
   } catch (err) {
@@ -481,7 +490,16 @@ async function resetDataConfirm() {
   if (!confirm('CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ bài nộp và đưa 200 máy về trạng thái ban đầu?')) return;
   try {
     const res = await fetch('/api/reset-data', { method: 'POST' });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error(text.slice(0, 150));
+    }
+    if (!res.ok) {
+      throw new Error(data.message || `Lỗi HTTP ${res.status}`);
+    }
     alert(data.message || 'Đã thiết lập lại trạng thái 200 máy thành công!');
     fetchInitialData();
   } catch (err) {

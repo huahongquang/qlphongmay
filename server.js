@@ -31,8 +31,19 @@ try {
 // Cấu hình Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static(PUBLIC_DIR));
+
+// Middleware chuẩn hóa URL: hỗ trợ trường hợp Vercel chuyển tiếp có hoặc không có tiền tố /api
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api/')) {
+    const apiEndpoints = ['exam-info', 'exam-config', 'computers', 'submissions', 'alerts', 'submit-exam', 'download', 'export-zip', 'simulate-data', 'reset-data', 'my-ip', 'heartbeat'];
+    const firstSegment = req.url.split('/')[1]?.split('?')[0];
+    if (apiEndpoints.includes(firstSegment)) {
+      req.url = '/api' + req.url;
+    }
+  }
+  next();
+});
 
 // Trả về trang admin khi truy cập /admin
 app.get('/admin', (req, res) => {
@@ -402,7 +413,8 @@ app.get('/api/export-zip', (req, res) => {
 
 // 10. Tạo dữ liệu giả lập cho phòng 200 máy (Rất tiện lợi để Giám thị test hệ thống)
 app.post('/api/simulate-data', (req, res) => {
-  const db = getDB();
+  try {
+    const db = getDB();
   const count = parseInt(req.body.count) || 35; // Giả lập nộp 35 máy
 
   const vietNameseNames = [
@@ -423,10 +435,17 @@ app.post('/api/simulate-data', (req, res) => {
     const ipAddress = `192.168.1.${50 + pcIndex}`;
     const fakeFileName = `${userId}_${comp.deviceName}_demo_BaiLam_${pcIndex}.docx`;
 
-    // Tạo file mẫu trong uploads nếu chưa có
-    const dummyPath = path.join(UPLOADS_DIR, fakeFileName);
-    if (!fs.existsSync(dummyPath)) {
-      fs.writeFileSync(dummyPath, `Bài làm mẫu của sinh viên: ${studentName} - MSSV: ${userId} tại máy ${comp.deviceName}`, 'utf8');
+    // Tạo file mẫu trong uploads nếu chưa có (bọc an toàn cho serverless)
+    try {
+      if (!fs.existsSync(UPLOADS_DIR)) {
+        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      }
+      const dummyPath = path.join(UPLOADS_DIR, fakeFileName);
+      if (!fs.existsSync(dummyPath)) {
+        fs.writeFileSync(dummyPath, `Bài làm mẫu của sinh viên: ${studentName} - MSSV: ${userId} tại máy ${comp.deviceName}`, 'utf8');
+      }
+    } catch (e) {
+      // Bỏ qua lỗi ghi ổ đĩa khi chạy trên serverless như Vercel
     }
 
     const sub = {
@@ -530,6 +549,10 @@ app.post('/api/simulate-data', (req, res) => {
   broadcastWs('bulk_computers_updated', db.computers);
 
   res.json({ success: true, message: `Đã giả lập ${count} bài nộp thành công và 2 trường hợp cảnh báo gian lận mẫu!` });
+  } catch (err) {
+    console.error('Lỗi khi giả lập dữ liệu:', err);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ khi tạo giả lập: ' + err.message });
+  }
 });
 
 // 11. Đặt lại toàn bộ dữ liệu phòng thi
