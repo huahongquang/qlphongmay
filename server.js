@@ -223,7 +223,7 @@ app.get('/api/exam-info', (req, res) => {
 // 3. Cập nhật cấu hình kỳ thi (Dành cho Giám thị)
 app.post('/api/exam-config', (req, res) => {
   const db = getDB();
-  const { title, subject, durationMinutes, isOpen, allowedIpPrefix, allowResubmit } = req.body;
+  const { title, subject, durationMinutes, isOpen, allowedIpPrefix, allowResubmit, googleDriveSync, googleDriveWebhookUrl } = req.body;
 
   if (title !== undefined) db.exam.title = title;
   if (subject !== undefined) db.exam.subject = subject;
@@ -231,10 +231,47 @@ app.post('/api/exam-config', (req, res) => {
   if (isOpen !== undefined) db.exam.isOpen = Boolean(isOpen);
   if (allowedIpPrefix !== undefined) db.exam.allowedIpPrefix = allowedIpPrefix;
   if (allowResubmit !== undefined) db.exam.allowResubmit = Boolean(allowResubmit);
+  if (googleDriveSync !== undefined) db.exam.googleDriveSync = Boolean(googleDriveSync);
+  if (googleDriveWebhookUrl !== undefined) db.exam.googleDriveWebhookUrl = String(googleDriveWebhookUrl).trim();
 
   saveDB(db);
   broadcastWs('exam_updated', db.exam);
   res.json({ success: true, exam: db.exam });
+});
+
+// Kiểm tra kết nối Webhook Google Drive
+app.post('/api/test-google-drive', async (req, res) => {
+  const { webhookUrl } = req.body;
+  if (!webhookUrl) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập Webhook URL Google Apps Script!' });
+  }
+
+  try {
+    const testPayload = {
+      test: true,
+      fileName: 'KiemTra_KetNoi_PhongThi.txt',
+      fileBase64: Buffer.from('Kiem tra ket noi tu He thong Phong thi 200 may toi Google Drive thanh cong vao luc: ' + new Date().toISOString()).toString('base64'),
+      mimeType: 'text/plain',
+      userId: 'TEST-ADMIN',
+      studentName: 'Giam thi phong thi',
+      deviceName: 'PC-SERVER'
+    };
+
+    const driveRes = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(testPayload)
+    });
+
+    const result = await driveRes.json();
+    if (result.success) {
+      res.json({ success: true, message: 'Kết nối Google Drive thành công! File thử nghiệm đã được tạo.', fileUrl: result.fileUrl });
+    } else {
+      res.status(400).json({ success: false, message: 'Google Apps Script trả về lỗi: ' + (result.error || 'Kiểm tra lại quyền truy cập') });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Không thể kết nối đến Webhook Google Drive: ' + err.message });
+  }
 });
 
 // 4. Lấy danh sách 200 máy tính
@@ -337,6 +374,51 @@ app.post('/api/submit-exam', upload.single('examFile'), (req, res) => {
   }
 
   saveDB(db);
+
+  // Đẩy file lên Google Drive ngầm nếu được kích hoạt
+  if (db.exam.googleDriveSync && db.exam.googleDriveWebhookUrl) {
+    try {
+      let fileBuffer = null;
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fileBuffer = fs.readFileSync(req.file.path);
+      } else if (req.file.buffer) {
+        fileBuffer = req.file.buffer;
+      }
+      if (fileBuffer) {
+        const drivePayload = {
+          fileName: submissionRecord.fileName,
+          originalName: submissionRecord.originalName,
+          fileBase64: fileBuffer.toString('base64'),
+          mimeType: req.file.mimetype || 'application/octet-stream',
+          userId: submissionRecord.userId,
+          studentName: submissionRecord.studentName,
+          deviceName: submissionRecord.deviceName,
+          submitTime: submissionRecord.submitTime
+        };
+        fetch(db.exam.googleDriveWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(drivePayload)
+        })
+        .then(r => r.json())
+        .then(resDrive => {
+          if (resDrive && resDrive.fileUrl) {
+            submissionRecord.driveUrl = resDrive.fileUrl;
+            const currentDb = getDB();
+            const subInDb = currentDb.submissions.find(s => s.id === submissionRecord.id);
+            if (subInDb) {
+              subInDb.driveUrl = resDrive.fileUrl;
+              saveDB(currentDb);
+              broadcastWs('submission_created', subInDb);
+            }
+          }
+        })
+        .catch(e => console.warn('Lỗi gửi sang Google Drive:', e.message));
+      }
+    } catch (e) {
+      console.warn('Lỗi đọc buffer file cho Google Drive:', e.message);
+    }
+  }
 
   // Log theo đúng format của tài liệu Word
   console.log('=== BÀI NỘP MỚI ===', {

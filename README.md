@@ -34,7 +34,10 @@ Theo đúng nguyên tắc ghi nhận bộ 3 thông tin: **Mã Sinh Viên (User I
 - **Thống kê tổng quan (KPIs)**: Tổng máy (200), Online, Đã nộp bài, Chưa nộp bài, Số ca cảnh báo gian lận.
 - **Khóa / Mở cổng nộp bài**: Giám thị chỉ cần 1 click để khóa cổng khi hết giờ làm bài.
 - **Tải toàn bộ bài thi (.ZIP)**: Tải về một file ZIP duy nhất chứa toàn bộ bài làm của cả 200 thí sinh kèm file báo cáo tổng hợp `BaoCao_TongKet_PhongThi.json`.
-- **Chế độ Giả lập Demo (Simulation)**: Giúp giám thị hoặc người kiểm thử có thể giả lập nhanh 35 thí sinh nộp bài và 2 ca gian lận mẫu để trực quan hóa toàn bộ hệ thống ngay lập tức.
+### 1.5. Tự Động Lưu Bài Về Thư Mục Google Drive (Cloud Backup)
+- **Đồng bộ thời gian thực**: Khi thí sinh nộp bài, tệp bài làm vừa được lưu trên máy chủ/bộ nhớ, vừa tự động tải thẳng vào thư mục Google Drive của giáo viên.
+- **Không tốn phí & không cần thẻ tín dụng**: Sử dụng cơ chế Google Apps Script Webhook miễn phí 100%.
+- **Xem trực tiếp từ Dashboard**: Trên bảng điều khiển giám thị, bên cạnh nút "Tải", xuất hiện nút "Drive" màu xanh lá giúp giám thị mở trực tiếp file trên Google Drive chỉ với 1 click.
 
 ---
 

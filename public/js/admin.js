@@ -331,9 +331,16 @@ function renderSubmissionsTable() {
         <td class="px-3 py-3 text-slate-500">${timeStr}</td>
         <td class="px-3 py-3 text-center">${warningBadge}</td>
         <td class="px-3 py-3 text-right">
-          <a href="/api/download/${sub.fileName}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition font-semibold text-xs">
-            <i class="fa-solid fa-download"></i> Tải
-          </a>
+          <div class="flex items-center justify-end gap-1.5">
+            ${sub.driveUrl ? `
+              <a href="${sub.driveUrl}" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition font-semibold text-xs" title="Xem trên Google Drive">
+                <i class="fa-brands fa-google-drive"></i> Drive
+              </a>
+            ` : ''}
+            <a href="/api/download/${sub.fileName}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition font-semibold text-xs">
+              <i class="fa-solid fa-download"></i> Tải
+            </a>
+          </div>
         </td>
       </tr>
     `;
@@ -514,6 +521,8 @@ function openConfigModal() {
   document.getElementById('cfgDuration').value = examData.durationMinutes || 90;
   document.getElementById('cfgIpPrefix').value = examData.allowedIpPrefix || '192.168.1.';
   document.getElementById('cfgResubmit').checked = examData.allowResubmit !== false;
+  document.getElementById('cfgGoogleDriveSync').checked = Boolean(examData.googleDriveSync);
+  document.getElementById('cfgGoogleDriveWebhookUrl').value = examData.googleDriveWebhookUrl || '';
 
   document.getElementById('configModal').classList.remove('hidden');
 }
@@ -528,7 +537,9 @@ async function saveExamConfig() {
     subject: document.getElementById('cfgSubject').value,
     durationMinutes: document.getElementById('cfgDuration').value,
     allowedIpPrefix: document.getElementById('cfgIpPrefix').value,
-    allowResubmit: document.getElementById('cfgResubmit').checked
+    allowResubmit: document.getElementById('cfgResubmit').checked,
+    googleDriveSync: document.getElementById('cfgGoogleDriveSync').checked,
+    googleDriveWebhookUrl: document.getElementById('cfgGoogleDriveWebhookUrl').value.trim()
   };
 
   try {
@@ -546,5 +557,73 @@ async function saveExamConfig() {
     }
   } catch (err) {
     alert('Lỗi lưu cấu hình: ' + err.message);
+  }
+}
+
+// 16. Hỗ trợ Tích Hợp Google Drive & Google Apps Script
+const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    // Thay YOUR_FOLDER_ID bằng ID thư mục Google Drive của bạn (chuỗi sau folders/ trên URL)
+    // Hoặc để trống "" để lưu trực tiếp vào thư mục gốc My Drive
+    var folderId = ""; 
+    var folder = folderId ? DriveApp.getFolderById(folderId) : DriveApp.getRootFolder();
+    
+    var decoded = Utilities.base64Decode(data.fileBase64);
+    var blob = Utilities.newBlob(decoded, data.mimeType || 'application/octet-stream', data.fileName);
+    var file = folder.createFile(blob);
+    file.setDescription("Thí sinh: " + (data.studentName || '') + " | MSSV: " + (data.userId || '') + " | Máy: " + (data.deviceName || ''));
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      fileId: file.getId(),
+      fileUrl: file.getUrl()
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+function copyAppsScriptCode() {
+  navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE).then(() => {
+    alert("Đã sao chép mã Google Apps Script!\n\nBạn hãy mở script.google.com -> Dự án mới -> Dán mã này vào -> Bấm Triển khai (Deploy) làm Ứng dụng web (Ai cũng có quyền truy cập) -> Dán URL nhận được vào ô Webhook.");
+  }).catch(() => {
+    prompt("Sao chép mã Google Apps Script bên dưới:", GOOGLE_APPS_SCRIPT_TEMPLATE);
+  });
+}
+
+async function testGoogleDrive() {
+  const url = document.getElementById('cfgGoogleDriveWebhookUrl').value.trim();
+  if (!url) {
+    alert("Vui lòng dán Webhook URL Google Apps Script trước khi kiểm tra!");
+    return;
+  }
+  
+  const btn = event ? event.target : null;
+  const oldText = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang test...';
+
+  try {
+    const res = await fetch('/api/test-google-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl: url })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert("Tuyệt vời! Kết nối Google Drive thành công 100%!\nFile kiểm tra đã được lưu lên Google Drive.");
+      if (data.fileUrl) {
+        window.open(data.fileUrl, '_blank');
+      }
+    } else {
+      alert("Kết nối thất bại: " + (data.message || 'Lỗi không xác định'));
+    }
+  } catch (err) {
+    alert("Lỗi kết nối Webhook: " + err.message);
+  } finally {
+    if (btn) btn.innerHTML = oldText;
   }
 }

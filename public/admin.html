@@ -428,6 +428,42 @@
           <input type="checkbox" id="cfgResubmit" class="rounded text-blue-600">
           <label for="cfgResubmit" class="font-semibold text-slate-700">Cho phép thí sinh nộp lại đè bài cũ</label>
         </div>
+
+        <!-- TÍCH HỢP TỰ ĐỘNG LƯU BÀI VỀ GOOGLE DRIVE -->
+        <div class="border-t border-slate-200 pt-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <label class="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+              <i class="fa-brands fa-google-drive text-emerald-600 text-sm"></i> Tự Động Lưu Bài Về Google Drive
+            </label>
+            <input type="checkbox" id="cfgGoogleDriveSync" class="rounded text-emerald-600 w-4 h-4 cursor-pointer">
+          </div>
+          
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1 text-[11px]">Google Apps Script Webhook URL:</label>
+            <div class="flex gap-1.5">
+              <input type="text" id="cfgGoogleDriveWebhookUrl" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 p-2 font-mono text-[11px] border border-slate-200 rounded-lg">
+              <button type="button" onclick="testGoogleDrive()" class="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg font-bold text-[11px] whitespace-nowrap">
+                Kiểm Tra
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">Bài nộp từ cả 200 máy sẽ tự động tải lên thư mục Google Drive của bạn theo thời gian thực.</p>
+          </div>
+
+          <!-- Khung hướng dẫn 3 bước nhanh -->
+          <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-800">
+            <div class="flex justify-between items-center mb-1.5">
+              <span class="font-bold flex items-center gap-1 text-[11px]"><i class="fa-solid fa-circle-info"></i> Cách tạo Webhook Drive (2 phút):</span>
+              <button type="button" onclick="copyAppsScriptCode()" class="text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-300 hover:bg-emerald-100 transition">
+                <i class="fa-regular fa-copy"></i> Sao chép Code
+              </button>
+            </div>
+            <ol class="list-decimal list-inside space-y-0.5 text-[10px] text-emerald-700">
+              <li>Mở Google Drive ➡️ Tạo thư mục chứa bài thi.</li>
+              <li>Truy cập <a href="https://script.google.com" target="_blank" class="underline font-bold">script.google.com</a> ➡️ Dự án mới ➡️ Dán code đã sao chép.</li>
+              <li>Bấm <strong>Triển khai (Deploy)</strong> ➡️ Ứng dụng web ➡️ Ai có liên kết đều truy cập được ➡️ Dán URL Webhook vào ô trên.</li>
+            </ol>
+          </div>
+        </div>
       </div>
 
       <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">

@@ -58,7 +58,9 @@ const initialData = {
     isOpen: true, // Cho phép nộp bài hay đang khóa
     allowedIpPrefix: '192.168.1.', // Dải IP mạng nội bộ phòng máy
     allowResubmit: true, // Cho phép nộp lại bài
-    maxFileSizeMb: 100
+    maxFileSizeMb: 100,
+    googleDriveSync: false, // Bật đồng bộ Google Drive
+    googleDriveWebhookUrl: '' // URL Webhook Google Apps Script
   },
   computers: generateInitialComputers(200),
   submissions: [],
