@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const os = require('os');
 
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true' || !!process.env.NOW_REGION;
