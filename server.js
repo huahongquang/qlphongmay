@@ -33,13 +33,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(PUBLIC_DIR));
 
-// Middleware chuẩn hóa URL: hỗ trợ trường hợp Vercel chuyển tiếp có hoặc không có tiền tố /api
+// Middleware chuẩn hóa URL: tự động thêm tiền tố /api cho mọi endpoint khi Vercel chuyển tiếp
 app.use((req, res, next) => {
   if (!req.url.startsWith('/api/')) {
-    const apiEndpoints = ['exam-info', 'exam-config', 'computers', 'submissions', 'alerts', 'submit-exam', 'download', 'export-zip', 'simulate-data', 'reset-data', 'my-ip', 'heartbeat'];
-    const firstSegment = req.url.split('/')[1]?.split('?')[0];
-    if (apiEndpoints.includes(firstSegment)) {
-      req.url = '/api' + req.url;
+    if (!req.url.startsWith('/admin') && !req.url.startsWith('/client') && !req.url.startsWith('/js') && !req.url.startsWith('/css') && req.url !== '/' && req.url !== '/index.html') {
+      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
   }
   next();
@@ -257,12 +255,20 @@ app.post('/api/test-google-drive', async (req, res) => {
       deviceName: 'PC-SERVER'
     };
 
-    const driveRes = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testPayload),
-      redirect: 'follow'
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    let driveRes;
+    try {
+      driveRes = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload),
+        redirect: 'follow',
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     const responseText = await driveRes.text();
     let result;
@@ -281,6 +287,9 @@ app.post('/api/test-google-drive', async (req, res) => {
       res.status(400).json({ success: false, message: 'Google Apps Script báo lỗi: ' + (result.error || 'Kiểm tra lại quyền truy cập') });
     }
   } catch (err) {
+    if (err.name === 'AbortError') {
+      return res.status(408).json({ success: false, message: 'Google Apps Script phản hồi quá lâu (vượt quá 20s). Vui lòng thử lại lần nữa (lần đầu Google khởi động máy chủ ảo có thể mất vài giây).' });
+    }
     res.status(500).json({ success: false, message: 'Không thể gửi yêu cầu đến Webhook Google Drive: ' + err.message });
   }
 });

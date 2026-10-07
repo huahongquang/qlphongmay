@@ -628,11 +628,11 @@ async function testGoogleDrive() {
       body: JSON.stringify({ webhookUrl: url })
     });
     const text = await res.text();
-    let data;
+    let data = {};
     try {
       data = JSON.parse(text);
     } catch (parseErr) {
-      throw new Error(text.slice(0, 150));
+      data = { success: false, message: text.slice(0, 200) };
     }
 
     if (data.success) {

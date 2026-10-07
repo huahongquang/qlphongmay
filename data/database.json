@@ -16,7 +16,7 @@
       "deviceName": "PC-001",
       "room": "Phòng A (Tầng 1)",
       "expectedIp": "192.168.1.51",
-      "status": "online",
+      "status": "offline",
       "lastHeartbeat": "2026-10-07T06:10:15.293Z",
       "currentUserId": null,
       "currentStudentName": "Hua Hong Quang",
