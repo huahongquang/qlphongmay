@@ -260,17 +260,28 @@ app.post('/api/test-google-drive', async (req, res) => {
     const driveRes = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testPayload)
+      body: JSON.stringify(testPayload),
+      redirect: 'follow'
     });
 
-    const result = await driveRes.json();
+    const responseText = await driveRes.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseErr) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google Apps Script trả về nội dung không phải JSON: "' + responseText.slice(0, 180) + '...". Nguyên nhân thường do khi Triển khai (Deploy) chưa chọn quyền "Ai có liên kết đều truy cập được" (Anyone) hoặc chưa cấp quyền DriveApp.'
+      });
+    }
+
     if (result.success) {
-      res.json({ success: true, message: 'Kết nối Google Drive thành công! File thử nghiệm đã được tạo.', fileUrl: result.fileUrl });
+      res.json({ success: true, message: 'Kết nối Google Drive thành công! File thử nghiệm đã được tạo trong thư mục BaiThi_PhongMay.', fileUrl: result.fileUrl });
     } else {
-      res.status(400).json({ success: false, message: 'Google Apps Script trả về lỗi: ' + (result.error || 'Kiểm tra lại quyền truy cập') });
+      res.status(400).json({ success: false, message: 'Google Apps Script báo lỗi: ' + (result.error || 'Kiểm tra lại quyền truy cập') });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Không thể kết nối đến Webhook Google Drive: ' + err.message });
+    res.status(500).json({ success: false, message: 'Không thể gửi yêu cầu đến Webhook Google Drive: ' + err.message });
   }
 });
 

@@ -561,19 +561,34 @@ async function saveExamConfig() {
 }
 
 // 16. Hỗ trợ Tích Hợp Google Drive & Google Apps Script
-const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doPost(e) {
+const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Google Apps Script Webhook hoạt động tốt!" })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
-    // Thay YOUR_FOLDER_ID bằng ID thư mục Google Drive của bạn (chuỗi sau folders/ trên URL)
-    // Hoặc để trống "" để lưu trực tiếp vào thư mục gốc My Drive
-    var folderId = ""; 
-    var folder = folderId ? DriveApp.getFolderById(folderId) : DriveApp.getRootFolder();
-    
+    var contents = (e && e.postData) ? e.postData.contents : null;
+    if (!contents) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Không nhận được nội dung" })).setMimeType(ContentService.MimeType.JSON);
+    }
+    var data = JSON.parse(contents);
+
+    // Tự động tìm hoặc tạo thư mục 'BaiThi_PhongMay' trong Drive
+    var folder;
+    var folders = DriveApp.getFoldersByName("BaiThi_PhongMay");
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder("BaiThi_PhongMay");
+    }
+
     var decoded = Utilities.base64Decode(data.fileBase64);
-    var blob = Utilities.newBlob(decoded, data.mimeType || 'application/octet-stream', data.fileName);
+    var blob = Utilities.newBlob(decoded, data.mimeType || 'application/octet-stream', data.fileName || 'BaiThi.docx');
     var file = folder.createFile(blob);
-    file.setDescription("Thí sinh: " + (data.studentName || '') + " | MSSV: " + (data.userId || '') + " | Máy: " + (data.deviceName || ''));
     
+    var desc = "Thí sinh: " + (data.studentName || '') + " | MSSV: " + (data.userId || '') + " | Máy: " + (data.deviceName || '');
+    file.setDescription(desc);
+
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       fileId: file.getId(),
@@ -589,7 +604,7 @@ const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doPost(e) {
 
 function copyAppsScriptCode() {
   navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE).then(() => {
-    alert("Đã sao chép mã Google Apps Script!\n\nBạn hãy mở script.google.com -> Dự án mới -> Dán mã này vào -> Bấm Triển khai (Deploy) làm Ứng dụng web (Ai cũng có quyền truy cập) -> Dán URL nhận được vào ô Webhook.");
+    alert("Đã sao chép mã Google Apps Script!\n\nBạn hãy mở script.google.com -> Dự án mới -> Xóa code cũ và Dán mã này vào -> Bấm Triển khai (Deploy) làm Ứng dụng web (Ai cũng có quyền truy cập) -> Dán URL nhận được vào ô Webhook.");
   }).catch(() => {
     prompt("Sao chép mã Google Apps Script bên dưới:", GOOGLE_APPS_SCRIPT_TEMPLATE);
   });
@@ -612,17 +627,24 @@ async function testGoogleDrive() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ webhookUrl: url })
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      throw new Error(text.slice(0, 150));
+    }
+
     if (data.success) {
-      alert("Tuyệt vời! Kết nối Google Drive thành công 100%!\nFile kiểm tra đã được lưu lên Google Drive.");
+      alert("Tuyệt vời! Kết nối Google Drive thành công 100%!\nFile kiểm tra đã được lưu vào thư mục BaiThi_PhongMay trên Google Drive.");
       if (data.fileUrl) {
         window.open(data.fileUrl, '_blank');
       }
     } else {
-      alert("Kết nối thất bại: " + (data.message || 'Lỗi không xác định'));
+      alert("Kết nối thất bại:\n" + (data.message || 'Lỗi không xác định'));
     }
   } catch (err) {
-    alert("Lỗi kết nối Webhook: " + err.message);
+    alert("Lỗi kết nối Webhook:\n" + err.message);
   } finally {
     if (btn) btn.innerHTML = oldText;
   }
