@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchExamInfo();
   initWebSocket();
   restoreSavedDevice();
+  // Khởi động gửi heartbeat định kỳ 10s (chạy tốt trên cả WebSocket và HTTP REST)
+  heartbeatInterval = setInterval(sendHeartbeat, 10000);
 });
 
 // 1. Tạo danh sách 200 máy trạm để chọn nhanh
@@ -64,6 +66,7 @@ async function fetchClientIp() {
     currentClientIp = data.ipAddress || '127.0.0.1';
     document.getElementById('clientIpDisplay').textContent = currentClientIp;
     document.getElementById('ipAddressField').value = currentClientIp;
+    updateConnectionBadge(true);
   } catch (err) {
     console.warn('Không lấy được IP qua API:', err);
     document.getElementById('clientIpDisplay').textContent = '127.0.0.1 (LAN)';
@@ -76,6 +79,7 @@ async function fetchExamInfo() {
   try {
     const res = await fetch('/api/exam-info');
     const data = await res.json();
+    updateConnectionBadge(true);
     if (data.exam) {
       document.getElementById('examTitle').textContent = data.exam.title || 'Kỳ Thi Tin Học';
       document.getElementById('examSubject').textContent = `Môn thi: ${data.exam.subject || 'Thực hành Tin học'}`;
@@ -98,6 +102,7 @@ async function fetchExamInfo() {
     }
   } catch (err) {
     console.error('Lỗi khi tải thông tin kỳ thi:', err);
+    updateConnectionBadge(false);
   }
 }
 
@@ -116,14 +121,13 @@ function initWebSocket() {
       heartbeatInterval = setInterval(sendHeartbeat, 15000); // 15 giây ping 1 lần
     };
 
-    ws.onclose = () => {
-      updateConnectionBadge(false);
-      // Thử kết nối lại sau 4s
-      setTimeout(initWebSocket, 4000);
+    ws.onerror = () => {
+      // WebSocket không khả dụng (ví dụ trên Vercel Serverless), hệ thống tự động chuyển sang chế độ HTTP Polling
     };
 
-    ws.onerror = () => {
-      updateConnectionBadge(false);
+    ws.onclose = () => {
+      // Thử kết nối lại WebSocket sau 15s
+      setTimeout(initWebSocket, 15000);
     };
 
     ws.onmessage = (event) => {
@@ -137,12 +141,13 @@ function initWebSocket() {
       }
     };
   } catch (e) {
-    console.error('Không thể kết nối WebSocket:', e);
+    console.warn('WebSocket không khả dụng, sử dụng kết nối HTTP REST:', e);
   }
 }
 
 function updateConnectionBadge(isConnected) {
   const badge = document.getElementById('connectionBadge');
+  if (!badge) return;
   if (isConnected) {
     badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
     badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 pulse-dot"></span><span>Đã kết nối Server</span>';
