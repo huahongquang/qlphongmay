@@ -14,28 +14,55 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true' || !!process.env.NOW_REGION;
 const PORT = process.env.PORT || 3000;
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const UPLOADS_DIR = isVercel ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, 'uploads');
+const PUBLIC_DIR = fs.existsSync(path.join(__dirname, 'public')) 
+  ? path.join(__dirname, 'public') 
+  : path.join(process.cwd(), 'public');
 
 // Đảm bảo thư mục uploads tồn tại
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (e) {}
 
 // Cấu hình Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(PUBLIC_DIR));
 
 // Trả về trang admin khi truy cập /admin
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
 });
 
 // Trả về trang nộp bài khi truy cập / hoặc /client
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
+// Endpoint Heartbeat qua HTTP REST (Dự phòng khi môi trường không hỗ trợ WebSocket như Vercel)
+app.post('/api/heartbeat', (req, res) => {
+  const { deviceName, userId, studentName } = req.body;
+  if (!deviceName) return res.json({ success: false });
+
+  const clientIp = getClientIp(req);
+  const db = getDB();
+  const comp = db.computers.find(c => c.deviceName.toLowerCase() === deviceName.toLowerCase());
+  if (comp) {
+    comp.status = comp.status === 'submitted' ? 'submitted' : 'online';
+    comp.lastHeartbeat = new Date().toISOString();
+    comp.currentIp = clientIp;
+    if (userId) comp.currentUserId = userId;
+    if (studentName) comp.currentStudentName = studentName;
+
+    saveDB(db);
+    broadcastWs('computer_updated', comp);
+  }
+  res.json({ success: true, comp });
 });
 
 // Cấu hình Multer để lưu trữ file nộp bài (Chuẩn theo tài liệu Word)
@@ -537,22 +564,25 @@ server.on('error', (err) => {
   }
 });
 
-// Khởi chạy Server
-server.listen(PORT, () => {
-  const ips = getServerIps();
-  console.log('\n=============================================================');
-  console.log(' HỆ THỐNG QUẢN LÝ PHÒNG THI 200 MÁY TÍNH - KHỞI ĐỘNG THÀNH CÔNG');
-  console.log('=============================================================');
-  console.log(` • Server đang lắng nghe tại Cổng: ${PORT}`);
-  console.log(` • Giao diện Giám thị (Dashboard): http://localhost:${PORT}/admin`);
-  console.log(` • Giao diện Thí sinh (Client)  : http://localhost:${PORT}/`);
-  if (ips.length > 0) {
-    console.log('-------------------------------------------------------------');
-    console.log(' • Địa chỉ IP mạng LAN để 200 máy trạm truy cập:');
-    ips.forEach(ip => {
-      console.log(`   👉 http://${ip.address}:${PORT}/ (Giao diện thí sinh nộp bài)`);
-      console.log(`   👉 http://${ip.address}:${PORT}/admin (Dashboard giám thị theo dõi)`);
-    });
-  }
-  console.log('=============================================================\n');
-});
+if (!isVercel) {
+  server.listen(PORT, () => {
+    const ips = getServerIps();
+    console.log('\n=============================================================');
+    console.log(' HỆ THỐNG QUẢN LÝ PHÒNG THI 200 MÁY TÍNH - KHỞI ĐỘNG THÀNH CÔNG');
+    console.log('=============================================================');
+    console.log(` • Server đang lắng nghe tại Cổng: ${PORT}`);
+    console.log(` • Giao diện Giám thị (Dashboard): http://localhost:${PORT}/admin`);
+    console.log(` • Giao diện Thí sinh (Client)  : http://localhost:${PORT}/`);
+    if (ips.length > 0) {
+      console.log('-------------------------------------------------------------');
+      console.log(' • Địa chỉ IP mạng LAN để 200 máy trạm truy cập:');
+      ips.forEach(ip => {
+        console.log(`   👉 http://${ip.address}:${PORT}/ (Giao diện thí sinh nộp bài)`);
+        console.log(`   👉 http://${ip.address}:${PORT}/admin (Dashboard giám thị theo dõi)`);
+      });
+    }
+    console.log('=============================================================\n');
+  });
+}
+
+module.exports = app;

@@ -1,12 +1,19 @@
-const fs = require('fs');
-const path = require('path');
+const os = require('os');
 
-const DATA_DIR = path.join(__dirname, 'data');
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true' || !!process.env.NOW_REGION;
+const DATA_DIR = isVercel ? path.join(os.tmpdir(), 'qlpm_data') : path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
+// Biến lưu trữ in-memory cache dự phòng
+let memoryCache = null;
+
 // Đảm bảo thư mục data tồn tại
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  // Ignored on read-only environments
 }
 
 // Khởi tạo 200 máy tính mặc định
@@ -61,27 +68,32 @@ const initialData = {
 
 // Đọc DB
 function getDB() {
+  if (memoryCache) return memoryCache;
   if (!fs.existsSync(DB_FILE)) {
+    memoryCache = JSON.parse(JSON.stringify(initialData));
     saveDB(initialData);
-    return initialData;
+    return memoryCache;
   }
   try {
     const content = fs.readFileSync(DB_FILE, 'utf8');
-    return JSON.parse(content);
+    memoryCache = JSON.parse(content);
+    return memoryCache;
   } catch (err) {
     console.error('Lỗi khi đọc file DB:', err);
-    return initialData;
+    memoryCache = JSON.parse(JSON.stringify(initialData));
+    return memoryCache;
   }
 }
 
 // Lưu DB an toàn
 function saveDB(data) {
+  memoryCache = data;
   try {
     const tempFile = `${DB_FILE}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf8');
     fs.renameSync(tempFile, DB_FILE);
   } catch (err) {
-    console.error('Lỗi khi lưu file DB:', err);
+    // Trên môi trường serverless (như Vercel), ghi file có thể bị giới hạn, memoryCache đã giữ state
   }
 }
 

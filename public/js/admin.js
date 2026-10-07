@@ -156,10 +156,40 @@ function initWebSocket() {
     }
   };
 
+  ws.onerror = () => {
+    // WebSocket không khả dụng trên môi trường Serverless (Vercel), cơ chế polling sẽ đảm nhiệm
+  };
+
   ws.onclose = () => {
-    setTimeout(initWebSocket, 4000);
+    // Thử kết nối lại sau 10s
+    setTimeout(initWebSocket, 10000);
   };
 }
+
+// Polling định kỳ dự phòng (hoạt động hoàn hảo trên cả Serverless Vercel và mạng LAN)
+setInterval(async () => {
+  try {
+    const [resComp, resSub, resAlt] = await Promise.all([
+      fetch('/api/computers'),
+      fetch('/api/submissions'),
+      fetch('/api/alerts')
+    ]);
+    const dataComp = await resComp.json();
+    const dataSub = await resSub.json();
+    const dataAlt = await resAlt.json();
+
+    if (dataComp.computers) computersData = dataComp.computers;
+    if (dataSub.submissions) submissionsData = dataSub.submissions;
+    if (dataAlt.alerts) alertsData = dataAlt.alerts;
+
+    updateStats();
+    renderMatrix();
+    renderSubmissionsTable();
+    renderAlertsTable();
+  } catch (err) {
+    // Bỏ qua lỗi polling mạng ngắt quãng
+  }
+}, 5000);
 
 // 6. Hiển thị Sơ Đồ Ma Trận 200 Máy Tính
 function renderMatrix() {

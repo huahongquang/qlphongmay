@@ -153,19 +153,35 @@ function updateConnectionBadge(isConnected) {
 }
 
 // Gửi Heartbeat lên server để Giám thị biết máy này đang online
-function sendHeartbeat() {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    const deviceName = document.getElementById('deviceName').value.trim();
-    const userId = document.getElementById('userId').value.trim();
-    const studentName = document.getElementById('studentName').value.trim();
+async function sendHeartbeat() {
+  const deviceName = document.getElementById('deviceName').value.trim();
+  const userId = document.getElementById('userId').value.trim();
+  const studentName = document.getElementById('studentName').value.trim();
 
-    if (deviceName) {
-      ws.send(JSON.stringify({
-        type: 'heartbeat',
-        deviceName,
-        userId,
-        studentName
-      }));
+  if (!deviceName) return;
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'heartbeat',
+      deviceName,
+      userId,
+      studentName
+    }));
+    updateConnectionBadge(true);
+  } else {
+    // Dự phòng qua HTTP REST khi chạy trên môi trường như Vercel
+    try {
+      const res = await fetch('/api/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceName, userId, studentName })
+      });
+      const data = await res.json();
+      if (data.success) {
+        updateConnectionBadge(true);
+      }
+    } catch (e) {
+      updateConnectionBadge(false);
     }
   }
 }
